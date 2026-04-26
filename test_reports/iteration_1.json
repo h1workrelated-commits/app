@@ -1,0 +1,59 @@
+{
+  "summary": "Backend API testing for Creator Storefront MVP. Created pytest suite with 34 tests covering auth, store, products, subscribe/customers, orders, affiliates, analytics, Stripe checkout, webhook, and account deletion. 33/34 tests passed. One CRITICAL issue: /api/checkout/status returns 500 instead of graceful response when Stripe doesn't recognize the just-created session.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "GET /api/checkout/status/{session_id}",
+        "issue": "Returns HTTP 500 (Internal Server Error) when Stripe responds with 'No such checkout.session' for a session that was JUST created via /api/checkout/create-session. emergentintegrations raises CheckoutError which is not caught in the route handler. Per requirements, this endpoint must NEVER return 500. Root cause in server.py lines 632-655: the call `await stripe.get_checkout_status(session_id)` is not wrapped in try/except. Need to catch CheckoutError and return current cached payment_transactions row with payment_status='initiated' / status='open' (or 502 with a JSON body), not let the exception bubble to a 500.",
+        "priority": "CRITICAL"
+      }
+    ],
+    "minor": [
+      {
+        "endpoint": "POST /api/webhook/stripe",
+        "issue": "Backend logs show 'Unexpected error processing webhook: id' for unsigned/malformed bodies. Endpoint correctly returns 400, but the log noise comes from emergentintegrations trying to parse a fake event. Acceptable for now — endpoint contract (graceful 400) is honored."
+      },
+      {
+        "endpoint": "POST /api/auth/signup, POST /api/auth/login",
+        "issue": "Cookie is set with samesite='lax' and no `secure=True` flag despite the public URL being HTTPS. Modern browsers will still accept it because samesite=lax is the default, but for production cross-site embeds (link-in-bio), consider samesite='none' + secure=True. Not blocking — Bearer token auth is the primary path."
+      },
+      {
+        "endpoint": "GET /api/store/{username} & POST /api/subscribe",
+        "issue": "Username lookup is case-insensitive on read paths (lowercased), which is consistent with signup behavior (lowercased on insert). Confirmed working."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "FIX CRITICAL: Wrap `await stripe.get_checkout_status(session_id)` in /api/checkout/status/{session_id} (server.py lines 638-639) with try/except CheckoutError. On error, return the cached payment_transactions row with current payment_status (e.g., 'initiated') and HTTP 200, OR return 502 with a JSON error body. Currently returns 500 which breaks the frontend polling flow.",
+    "Optional: Add similar exception handling around /api/checkout/create-session for Stripe API failures (currently propagates as 500 if Stripe rejects)."
+  ],
+  "critical_code_review_comments": [
+    "server.py line 639: Unhandled CheckoutError in checkout_status route causes HTTP 500. Must catch and degrade gracefully.",
+    "server.py: Single 700-line file is acceptable for MVP; consider splitting into routers/auth.py, routers/products.py, routers/checkout.py, services/stripe.py if it grows beyond ~1000 lines.",
+    "server.py line 685: CORS uses os.environ.get('CORS_ORIGINS', '*').split(',') with allow_credentials=True — wildcard with credentials is non-functional in browsers. .env has CORS_ORIGINS='*' which means cookies-with-credentials won't work cross-origin. Set explicit origin(s) in production.",
+    "server.py line 152-166: get_current_user re-fetches user from DB on every request — fine for MVP, but consider cache for /me hot path.",
+    "server.py line 379: send_email_async fired with asyncio.create_task without storing reference — exceptions silently dropped (acceptable for mock mode).",
+    "server.py: Account deletion does not delete payment_transactions for the user — minor data hygiene issue, not security.",
+    "server.py line 530-532: origin_url is taken from client request body without validation; a malicious caller could supply any origin for success_url. Consider validating against an allowlist or using server-side known frontend URL."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py (created)",
+    "/app/test_reports/pytest/pytest_results.xml (generated)"
+  ],
+  "success_rate": {"backend": "97% (33/34)", "frontend": "not tested (skipped per request)"},
+  "test_credentials": "Tests dynamically create accounts via /api/auth/signup with random emails creator_{hex8}@test.com / password123. No seeded admin. Recommended manual: creator@test.com / password123 / username 'creator' (per /app/memory/test_credentials.md).",
+  "seed_data_creation": "None. All test data is prefixed with TEST_ in title/email and is created+used inline within tests. Disposable accounts are NOT cleaned up after the run (each run uses unique uuid suffix so no collision).",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "After main agent fixes the /api/checkout/status 500 bug, re-run only TestCheckout::test_checkout_status to verify it now returns 200 with payment_status in {open, pending, unpaid, initiated}. Full suite: `pytest /app/backend/tests/backend_test.py -v`. Webhook signature failure already returns graceful 400 (verified). All other endpoints (auth, store, products, subscribe, customers, orders, affiliates, analytics, account delete) are working correctly.",
+  "rca of the issue": "RCA for /api/checkout/status 500: 1) Test creates session via POST /api/checkout/create-session → Stripe returns valid session_id (e.g., cs_test_a1DGxvBgxJs83gLxZyCvE6vbB5W0NEcugvL50MTy9Pd4jmLxoshovIlTk0). 2) Immediately polling GET /api/checkout/status/{session_id} → Stripe returns 'No such checkout.session' error (likely because sk_test_emergent is a special platform/sandbox key where session retrieve has different semantics, or eventual consistency lag). 3) emergentintegrations.payments.stripe.checkout.get_checkout_status() raises CheckoutError. 4) server.py route handler does not catch the exception → FastAPI returns 500. Reproduction: run `pytest /app/backend/tests/backend_test.py::TestCheckout -v`. Mitigation: wrap stripe.get_checkout_status in try/except CheckoutError; on failure return the cached row from db.payment_transactions with status='open', payment_status='initiated', HTTP 200."
+}
