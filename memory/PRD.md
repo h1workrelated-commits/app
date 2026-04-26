@@ -1,39 +1,36 @@
 # PRD — stand. (Creator Board)
 
 ## Concept
-Each creator has a **Board** at `/board/:username`. Board contains **Items** (Sell or Idea). Idea items have a CTA: Waitlist (email capture) or Support (paid).
+Creator-first link-in-bio "Board" at `/board/:username`. Each item is Sell or Idea (Waitlist/Support).
 
 ## Stack
-- Backend: FastAPI + MongoDB (motor)
-- Frontend: React (CRA) + Tailwind + Shadcn + Recharts
-- Auth: JWT (bcrypt) + httpOnly cookie + Bearer fallback
-- Payments: Stripe Checkout via `emergentintegrations` (test key)
-- Email: Resend (placeholder key — emails are mock-logged unless real key set)
-- AI: Claude Sonnet 4.5 via `emergentintegrations` LlmChat (Emergent universal key)
+- FastAPI + MongoDB + React (CRA) + Tailwind + Shadcn + Recharts
+- JWT auth (bcrypt) + httpOnly cookie + Bearer
+- Stripe via `emergentintegrations` (test key `sk_test_emergent`)
+- Resend for email — **MOCKED** (placeholder key — needs real key for live emails)
+- Claude Sonnet 4.5 via `emergentintegrations` LlmChat
+- Object storage via Emergent Object Storage (`EMERGENT_LLM_KEY`)
 
-## Implemented
-**Phase 1 (2026-02-26)**
-- Auth (signup/login/me/logout/delete-account)
-- Public storefront, product detail, Stripe checkout (create-session + status polling + webhook), creator dashboard (overview, products, orders, customers, analytics, affiliates, settings), email capture, idempotent post-payment processing
+## Implemented timeline
 
-**Phase 2 (2026-02-26) — Board pivot + AI Quick Idea**
-- Routes: `/board/:username` and `/item/:id` aliases (old `/store/`, `/product/` still work)
-- AI Quick Idea: floating ⚡ button on Items page → free-text input → Claude Sonnet 4.5 cleans into `{title, one_liner, cta_text}` → preview/edit → publish (defaults to Idea + Waitlist + free)
-- Item card: bold title, one-liner, expand for full description, CTA button (Join waitlist / Support / Buy)
-- Lead Capture modal: email-only, low-friction
-- Telemetry: per-item events (view/click/cta_click/email_submit/time_spent) + aggregate counters; events collection auto-expires after 30 days
-- Auto-ranking on board: `score = clicks*1 + email_conversions*3 + time_factor`; featured items pinned first, then by score
-- Growth Loop: bottom-right "Start your own board" button on board pages, appears after 4s, dismissible (session-scoped), modal → /signup
-- Item form simplified: Sell ↔ Idea toggle; Idea has Waitlist/Support sub-toggle
-- Removed Affiliates from sidebar (backend kept for compatibility)
+**Phase 1** (2026-02-26): Auth, public storefront, product detail, Stripe checkout + webhook, full creator dashboard (overview, products, orders, customers, analytics, affiliates, settings), email capture, idempotent post-payment.
 
-## Personas
-- Creator: signs up → AI-publishes ideas in seconds → shares board link → watches what's converting
-- Visitor: lands on board → reads item → joins waitlist (email) or buys
-- Affiliate (legacy): tracked links + commission
+**Phase 2** — Board pivot + AI Quick Idea: `/board/:username` + `/item/:id` aliases, AI quick-create (Claude Sonnet 4.5 → title/one_liner/cta_text → preview/edit/publish), Item card with bold title + one-liner + expand + CTA, Lead Capture modal, telemetry (events collection + aggregate counters, 30-day TTL), auto-ranking on board, Growth Loop floater.
+
+**Phase 3** — Live readiness:
+- Image **uploads** (drag/click) wired to Emergent Object Storage; replaces URL-paste in Items create form and Settings avatar; `/api/upload` (auth) + `/api/files/{path}` (public serve, immutable cache).
+- $10/month **Pro upgrade** Stripe checkout (`/api/upgrade/checkout`); idempotent post-pay extends `pro_until` by 30 days.
+- "Upgrade to Pro" badge in dashboard sidebar (shows ✨ Pro Active when subscribed).
+- "Build your store · $10/mo" pricing block on landing page.
+- **Removed** Made-with-Emergent badge; updated `<title>` and meta description; preserved necessary platform scripts.
+- Account/Pro state refresh after successful upgrade (AuthContext.refreshUser).
+
+## Tests
+- 52/52 backend tests pass (auth, store, products, subscribe/customers, orders, affiliates, analytics, checkout + status graceful-degrade, webhook, upload, file serve, upgrade, AI improve, track).
 
 ## Backlog
 - P0: real Resend key for live emails
-- P1: object-storage for digital file uploads
-- P1: subscription/recurring billing for memberships
-- P2: AI suggestions on existing items (improve title/price), trial system + reminder emails, theme presets, password reset, traffic-source breakdown
+- P1: server-side allowlist for `origin_url` on Stripe checkout endpoints
+- P1: stream-validate upload size from Content-Length before reading
+- P2: ingress cache header passthrough for `/api/files/*`
+- P2: trial+reminder system, recurring (true) subscription billing, theme presets, password reset
