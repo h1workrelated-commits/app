@@ -1,15 +1,14 @@
 import { Outlet, NavLink, Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
-import { LayoutDashboard, Package, ShoppingBag, Users, BarChart3, Settings, Share2, ExternalLink, LogOut, Store } from "lucide-react";
+import { LayoutDashboard, Package, ShoppingBag, Users, BarChart3, Settings, ExternalLink, LogOut, Store } from "lucide-react";
 
 const NAV = [
   { to: "/dashboard", icon: LayoutDashboard, label: "Overview", end: true, id: "nav-overview" },
-  { to: "/dashboard/products", icon: Package, label: "Products", id: "nav-products" },
+  { to: "/dashboard/items", icon: Package, label: "Items", id: "nav-items" },
   { to: "/dashboard/orders", icon: ShoppingBag, label: "Orders", id: "nav-orders" },
   { to: "/dashboard/customers", icon: Users, label: "Customers", id: "nav-customers" },
   { to: "/dashboard/analytics", icon: BarChart3, label: "Analytics", id: "nav-analytics" },
-  { to: "/dashboard/affiliates", icon: Share2, label: "Affiliates", id: "nav-affiliates" },
   { to: "/dashboard/settings", icon: Settings, label: "Settings", id: "nav-settings" },
 ];
 
@@ -46,13 +45,13 @@ export default function DashboardLayout() {
         <div className="p-3 border-t border-zinc-100 space-y-1.5">
           {user?.username && (
             <a
-              href={`/store/${user.username}`}
+              href={`/board/${user.username}`}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-2 px-3 py-2 rounded-xl text-sm text-zinc-700 hover:bg-zinc-100"
               data-testid="dashboard-view-store"
             >
-              <Store className="w-4 h-4" /> View my store <ExternalLink className="w-3 h-3 ml-auto" />
+              <Store className="w-4 h-4" /> View my board <ExternalLink className="w-3 h-3 ml-auto" />
             </a>
           )}
           <button

@@ -12,7 +12,6 @@ import DashboardOrders from "./pages/DashboardOrders";
 import DashboardCustomers from "./pages/DashboardCustomers";
 import DashboardAnalytics from "./pages/DashboardAnalytics";
 import DashboardSettings from "./pages/DashboardSettings";
-import DashboardAffiliates from "./pages/DashboardAffiliates";
 import Storefront from "./pages/Storefront";
 import ProductDetail from "./pages/ProductDetail";
 import Checkout from "./pages/Checkout";
@@ -34,16 +33,18 @@ export default function App() {
             <Route path="/" element={<Landing />} />
             <Route path="/login" element={<Login />} />
             <Route path="/signup" element={<Signup />} />
+            <Route path="/board/:username" element={<Storefront />} />
             <Route path="/store/:username" element={<Storefront />} />
+            <Route path="/item/:id" element={<ProductDetail />} />
             <Route path="/product/:id" element={<ProductDetail />} />
             <Route path="/checkout" element={<Checkout />} />
             <Route path="/dashboard" element={<Protected><DashboardLayout /></Protected>}>
               <Route index element={<DashboardHome />} />
+              <Route path="items" element={<DashboardProducts />} />
               <Route path="products" element={<DashboardProducts />} />
               <Route path="orders" element={<DashboardOrders />} />
               <Route path="customers" element={<DashboardCustomers />} />
               <Route path="analytics" element={<DashboardAnalytics />} />
-              <Route path="affiliates" element={<DashboardAffiliates />} />
               <Route path="settings" element={<DashboardSettings />} />
             </Route>
             <Route path="*" element={<Navigate to="/" replace />} />

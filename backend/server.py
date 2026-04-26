@@ -27,6 +27,7 @@ from emergentintegrations.payments.stripe.checkout import (
     CheckoutSessionResponse,
     CheckoutStatusResponse,
 )
+from emergentintegrations.llm.chat import LlmChat, UserMessage
 
 
 # ---------- Config ----------
@@ -36,6 +37,7 @@ JWT_SECRET = os.environ["JWT_SECRET"]
 STRIPE_API_KEY = os.environ["STRIPE_API_KEY"]
 RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
 SENDER_EMAIL = os.environ.get("SENDER_EMAIL", "onboarding@resend.dev")
+EMERGENT_LLM_KEY = os.environ.get("EMERGENT_LLM_KEY", "")
 JWT_ALG = "HS256"
 ACCESS_TOKEN_TTL_DAYS = 7
 
@@ -81,6 +83,7 @@ class ProductCreate(BaseModel):
     type: ProductType
     title: str
     description: Optional[str] = ""
+    one_liner: Optional[str] = ""
     price: float = 0.0
     image_url: Optional[str] = ""
     file_url: Optional[str] = ""
@@ -88,12 +91,15 @@ class ProductCreate(BaseModel):
     featured: bool = False
     is_active: bool = True
     recurring: bool = False
+    cta_type: Optional[str] = None  # 'buy' | 'waitlist' | 'support'
+    cta_text: Optional[str] = None
 
 
 class ProductUpdate(BaseModel):
     type: Optional[ProductType] = None
     title: Optional[str] = None
     description: Optional[str] = None
+    one_liner: Optional[str] = None
     price: Optional[float] = None
     image_url: Optional[str] = None
     file_url: Optional[str] = None
@@ -101,6 +107,8 @@ class ProductUpdate(BaseModel):
     featured: Optional[bool] = None
     is_active: Optional[bool] = None
     recurring: Optional[bool] = None
+    cta_type: Optional[str] = None
+    cta_text: Optional[str] = None
 
 
 class CheckoutBody(BaseModel):
@@ -126,6 +134,20 @@ class AffiliateCreate(BaseModel):
 class CustomerCreate(BaseModel):
     email: EmailStr
     name: Optional[str] = None
+
+
+class AIImproveBody(BaseModel):
+    text: str = Field(min_length=3, max_length=1000)
+
+
+class TrackBody(BaseModel):
+    item_id: Optional[str] = None
+    board_username: Optional[str] = None
+    event: Literal["view", "click", "cta_click", "email_submit", "time_spent"]
+    session_id: str
+    time_ms: Optional[int] = None
+    source: Optional[str] = None
+    path: Optional[str] = None
 
 
 # ---------- Helpers ----------
@@ -224,7 +246,7 @@ async def signup(body: SignupBody, response: Response):
         "user_id": user_id,
         "username": username,
         "name": body.name or username,
-        "bio": "Welcome to my store",
+        "bio": "Welcome to my board",
         "avatar_url": "",
         "accent_color": "#003CFF",
         "links": [],
@@ -282,7 +304,19 @@ async def get_store_public(username: str):
     products = await db.products.find(
         {"username": username, "is_active": True}, {"_id": 0}
     ).to_list(200)
+    # Ranking score: clicks*1 + email_submits*3 + time_spent_factor (capped)
+    for p in products:
+        clicks = int(p.get("click_count", 0)) + int(p.get("cta_clicks", 0))
+        emails = int(p.get("email_submits", 0)) + int(p.get("sales_count", 0))
+        time_factor = min(int(p.get("time_spent_total", 0)) / 60000, 50)  # ms→minutes, cap 50
+        p["score"] = round(clicks * 1 + emails * 3 + time_factor, 2)
+    products.sort(key=lambda p: (not p.get("featured", False), -p["score"], p.get("created_at", "")))
     return {"store": store, "products": products}
+
+
+@api.get("/board/{username}")
+async def get_board_public(username: str):
+    return await get_store_public(username)
 
 
 @api.get("/store")
@@ -323,6 +357,10 @@ async def create_product(body: ProductCreate, user: dict = Depends(get_current_u
         "sales_count": 0,
         "revenue": 0.0,
         "view_count": 0,
+        "click_count": 0,
+        "cta_clicks": 0,
+        "email_submits": 0,
+        "time_spent_total": 0,
     }
     await db.products.insert_one(doc)
     doc.pop("_id", None)
@@ -680,6 +718,85 @@ async def stripe_webhook(request: Request):
     if event.payment_status == "paid" and event.session_id:
         await _process_paid_session(event.session_id, "paid", 0, "usd")
     return {"received": True}
+
+
+# ---------- AI Quick Idea ----------
+@api.post("/ai/improve-idea")
+async def ai_improve_idea(body: AIImproveBody, user: dict = Depends(get_current_user)):
+    if not EMERGENT_LLM_KEY:
+        raise HTTPException(500, "AI not configured")
+    system = (
+        "You convert a creator's quick idea description into a published item. "
+        "Output ONLY a JSON object with these keys: "
+        '{"title": str (max 6 words, clear, sentence case), '
+        '"one_liner": str (one short sentence, plain language, no fluff), '
+        '"cta_text": str (max 4 words for a button, action-oriented like "Join waitlist" or "Get notified")}. '
+        "Do not include markdown, code fences, or any extra text."
+    )
+    chat = LlmChat(
+        api_key=EMERGENT_LLM_KEY,
+        session_id=f"idea-{user['id']}-{uuid.uuid4().hex[:8]}",
+        system_message=system,
+    ).with_model("anthropic", "claude-sonnet-4-5-20250929")
+    try:
+        raw = await chat.send_message(UserMessage(text=body.text))
+    except Exception as e:
+        logger.error(f"AI improve failed: {e}")
+        raise HTTPException(502, "AI service error")
+    import json
+    import re
+    text = (raw or "").strip()
+    text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text)
+    try:
+        parsed = json.loads(text)
+        title = str(parsed.get("title", "")).strip() or body.text[:60]
+        one_liner = str(parsed.get("one_liner", "")).strip()
+        cta_text = str(parsed.get("cta_text", "Join waitlist")).strip() or "Join waitlist"
+    except Exception:
+        title = body.text.strip()[:60]
+        one_liner = body.text.strip()
+        cta_text = "Join waitlist"
+    return {"title": title, "one_liner": one_liner, "cta_text": cta_text}
+
+
+# ---------- Telemetry ----------
+@api.post("/track")
+async def track_event(body: TrackBody, request: Request):
+    now = datetime.now(timezone.utc).isoformat()
+    src = body.source or request.headers.get("Referer") or ""
+    event_doc = {
+        "id": str(uuid.uuid4()),
+        "item_id": body.item_id,
+        "board_username": (body.board_username or "").lower() or None,
+        "event": body.event,
+        "session_id": body.session_id,
+        "time_ms": body.time_ms or 0,
+        "source": src[:300],
+        "path": (body.path or "")[:300],
+        "created_at": now,
+        "expires_at": datetime.now(timezone.utc) + timedelta(days=30),
+    }
+    await db.events.insert_one(event_doc)
+    if body.item_id:
+        inc = {}
+        if body.event == "view":
+            inc["view_count"] = 1
+        elif body.event == "click":
+            inc["click_count"] = 1
+        elif body.event == "cta_click":
+            inc["cta_clicks"] = 1
+        elif body.event == "email_submit":
+            inc["email_submits"] = 1
+        elif body.event == "time_spent" and body.time_ms:
+            inc["time_spent_total"] = int(body.time_ms)
+        if inc:
+            await db.products.update_one({"id": body.item_id}, {"$inc": inc})
+    if body.board_username and body.event == "view":
+        await db.stores.update_one(
+            {"username": body.board_username.lower()},
+            {"$inc": {"view_count": 1}},
+        )
+    return {"ok": True}
 
 
 # ---------- Health ----------

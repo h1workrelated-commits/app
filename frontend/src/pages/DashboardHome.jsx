@@ -33,24 +33,24 @@ export default function DashboardHome() {
     })();
   }, []);
 
-  const storeUrl = user?.username ? `${window.location.origin}/store/${user.username}` : "";
+  const storeUrl = user?.username ? `${window.location.origin}/board/${user.username}` : "";
 
   return (
     <div className="space-y-8" data-testid="dashboard-home">
       <div className="flex items-start justify-between flex-wrap gap-4">
         <div>
           <h1 className="font-heading text-3xl sm:text-4xl font-semibold tracking-tight text-zinc-900">Hi, {user?.name} 👋</h1>
-          <p className="text-zinc-500 mt-1">Here's how your store is doing today.</p>
+          <p className="text-zinc-500 mt-1">Here's how your board is doing today.</p>
         </div>
-        <Link to="/dashboard/products" data-testid="dashboard-add-product-cta">
-          <Button className="rounded-full bg-[#003CFF] hover:bg-[#002ED6]"><Plus className="w-4 h-4 mr-1" /> Add product</Button>
+        <Link to="/dashboard/items" data-testid="dashboard-add-product-cta">
+          <Button className="rounded-full bg-[#003CFF] hover:bg-[#002ED6]"><Plus className="w-4 h-4 mr-1" /> Add item</Button>
         </Link>
       </div>
 
       {/* Store link card */}
       <div className="rounded-2xl bg-zinc-900 text-white p-6 sm:p-7 flex items-center justify-between gap-4 flex-wrap">
         <div>
-          <div className="text-xs font-semibold tracking-wider uppercase text-zinc-400">Your store</div>
+          <div className="text-xs font-semibold tracking-wider uppercase text-zinc-400">Your board</div>
           <div className="mt-1 font-heading text-lg sm:text-xl break-all" data-testid="dashboard-store-url">{storeUrl}</div>
         </div>
         <div className="flex gap-2">
