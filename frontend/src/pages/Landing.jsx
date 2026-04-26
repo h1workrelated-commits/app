@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, Sparkles, Zap, ShoppingBag, BarChart3, Mail, Users } from "lucide-react";
+import { ArrowRight, Sparkles, Zap, ShoppingBag, BarChart3, Mail, Users, Check } from "lucide-react";
 
 export default function Landing() {
   return (
@@ -100,6 +100,46 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* Pricing */}
+      <section className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 pb-16">
+        <div className="text-center mb-10">
+          <div className="inline-flex items-center gap-2 rounded-full bg-zinc-100 px-3 py-1.5 text-xs font-semibold tracking-wider uppercase text-zinc-700">
+            One simple price
+          </div>
+          <h2 className="font-heading text-3xl sm:text-5xl font-semibold tracking-tight text-zinc-900 mt-4">
+            $10 a month. That's it.
+          </h2>
+        </div>
+        <div className="rounded-3xl bg-white border-2 border-[#003CFF] p-8 sm:p-10 shadow-[0_16px_48px_rgba(0,60,255,0.12)]">
+          <div className="flex items-baseline gap-1">
+            <span className="font-heading text-6xl font-bold text-zinc-900">$10</span>
+            <span className="text-lg text-zinc-500">/month</span>
+          </div>
+          <p className="text-zinc-600 mt-2">Build your store. Cancel anytime. No commitment.</p>
+          <ul className="mt-6 grid sm:grid-cols-2 gap-3">
+            {[
+              "Unlimited items on your board",
+              "AI quick-create ideas in seconds",
+              "Built-in email capture",
+              "Stripe checkout & instant delivery",
+              "Real analytics — no fluff",
+              "Auto-ranking for top items",
+            ].map(p => (
+              <li key={p} className="flex items-start gap-2 text-sm text-zinc-700">
+                <Check className="w-4 h-4 text-emerald-500 mt-0.5 flex-shrink-0" />
+                {p}
+              </li>
+            ))}
+          </ul>
+          <Link to="/signup" data-testid="pricing-cta-signup">
+            <Button className="mt-7 w-full rounded-full bg-[#003CFF] hover:bg-[#002ED6] h-12 text-base">
+              Start your store · $10/mo
+            </Button>
+          </Link>
+          <p className="text-xs text-zinc-400 text-center mt-3">Free trial available · We'll remind you before renewal</p>
+        </div>
+      </section>
+
       {/* CTA */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-24">
         <div className="rounded-3xl bg-zinc-900 text-white p-10 sm:p-16 text-center">
@@ -116,7 +156,7 @@ export default function Landing() {
       </section>
 
       <footer className="border-t border-zinc-100 py-8 text-center text-sm text-zinc-500">
-        Built fast. Made for creators.
+        Built fast. Made for creators. © stand.
       </footer>
     </div>
   );

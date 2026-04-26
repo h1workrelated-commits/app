@@ -2,6 +2,7 @@ import { Outlet, NavLink, Link, useNavigate } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { LayoutDashboard, Package, ShoppingBag, Users, BarChart3, Settings, ExternalLink, LogOut, Store } from "lucide-react";
+import UpgradeButton from "@/components/UpgradeButton";
 
 const NAV = [
   { to: "/dashboard", icon: LayoutDashboard, label: "Overview", end: true, id: "nav-overview" },
@@ -42,7 +43,8 @@ export default function DashboardLayout() {
             </NavLink>
           ))}
         </nav>
-        <div className="p-3 border-t border-zinc-100 space-y-1.5">
+        <div className="p-3 border-t border-zinc-100 space-y-2">
+          <UpgradeButton variant="sidebar" />
           {user?.username && (
             <a
               href={`/board/${user.username}`}

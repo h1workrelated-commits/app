@@ -15,7 +15,8 @@ from typing import List, Optional, Literal
 import bcrypt
 import jwt
 import resend
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, Response
+import requests as http_requests
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request, Response, UploadFile, File
 from fastapi.responses import JSONResponse
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -40,6 +41,60 @@ SENDER_EMAIL = os.environ.get("SENDER_EMAIL", "onboarding@resend.dev")
 EMERGENT_LLM_KEY = os.environ.get("EMERGENT_LLM_KEY", "")
 JWT_ALG = "HS256"
 ACCESS_TOKEN_TTL_DAYS = 7
+
+# Object storage
+STORAGE_URL = "https://integrations.emergentagent.com/objstore/api/v1/storage"
+APP_NAME = "stand-board"
+ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+MAX_UPLOAD_BYTES = 5 * 1024 * 1024
+PRO_PRICE_USD = 10.0
+PRO_DAYS = 30
+storage_key: Optional[str] = None
+
+
+def init_storage() -> Optional[str]:
+    global storage_key
+    if storage_key:
+        return storage_key
+    if not EMERGENT_LLM_KEY:
+        return None
+    try:
+        resp = http_requests.post(
+            f"{STORAGE_URL}/init",
+            json={"emergent_key": EMERGENT_LLM_KEY},
+            timeout=30,
+        )
+        resp.raise_for_status()
+        storage_key = resp.json()["storage_key"]
+        return storage_key
+    except Exception as e:
+        logging.getLogger("storefront").warning(f"Storage init failed: {e}")
+        return None
+
+
+def put_object_sync(path: str, data: bytes, content_type: str) -> dict:
+    key = init_storage()
+    if not key:
+        raise HTTPException(503, "Storage unavailable")
+    resp = http_requests.put(
+        f"{STORAGE_URL}/objects/{path}",
+        headers={"X-Storage-Key": key, "Content-Type": content_type},
+        data=data, timeout=120,
+    )
+    resp.raise_for_status()
+    return resp.json()
+
+
+def get_object_sync(path: str):
+    key = init_storage()
+    if not key:
+        raise HTTPException(503, "Storage unavailable")
+    resp = http_requests.get(
+        f"{STORAGE_URL}/objects/{path}",
+        headers={"X-Storage-Key": key}, timeout=60,
+    )
+    resp.raise_for_status()
+    return resp.content, resp.headers.get("Content-Type", "application/octet-stream")
 
 resend.api_key = RESEND_API_KEY
 
@@ -148,6 +203,10 @@ class TrackBody(BaseModel):
     time_ms: Optional[int] = None
     source: Optional[str] = None
     path: Optional[str] = None
+
+
+class UpgradeBody(BaseModel):
+    origin_url: str
 
 
 # ---------- Helpers ----------
@@ -619,6 +678,24 @@ async def _process_paid_session(session_id: str, payment_status: str, amount_tot
         return False
 
     md = txn.get("metadata", {}) or {}
+    kind = md.get("kind") or txn.get("kind")
+    if kind == "upgrade":
+        user_id = md.get("user_id") or txn.get("user_id")
+        if user_id:
+            current = await db.users.find_one({"id": user_id}, {"_id": 0, "pro_until": 1})
+            now = datetime.now(timezone.utc)
+            base = now
+            if current and current.get("pro_until"):
+                try:
+                    existing = datetime.fromisoformat(current["pro_until"])
+                    if existing > now:
+                        base = existing
+                except Exception:
+                    pass
+            new_until = (base + timedelta(days=PRO_DAYS)).isoformat()
+            await db.users.update_one({"id": user_id}, {"$set": {"pro_until": new_until}})
+        return True
+
     product_id = md.get("product_id")
     user_id = md.get("user_id")
     buyer_email = md.get("buyer_email") or txn.get("buyer_email", "")
@@ -800,6 +877,81 @@ async def track_event(body: TrackBody, request: Request):
 
 
 # ---------- Health ----------
+@api.post("/upload")
+async def upload_image(file: UploadFile = File(...), user: dict = Depends(get_current_user)):
+    if file.content_type not in ALLOWED_IMAGE_TYPES:
+        raise HTTPException(400, "Unsupported image type")
+    data = await file.read()
+    if len(data) > MAX_UPLOAD_BYTES:
+        raise HTTPException(400, "File too large (5 MB max)")
+    ext = (file.filename or "img").rsplit(".", 1)[-1].lower() if "." in (file.filename or "") else "jpg"
+    if ext not in {"jpg", "jpeg", "png", "webp", "gif"}:
+        ext = "jpg"
+    path = f"{APP_NAME}/uploads/{user['id']}/{uuid.uuid4().hex}.{ext}"
+    result = await asyncio.to_thread(put_object_sync, path, data, file.content_type)
+    await db.files.insert_one({
+        "id": str(uuid.uuid4()),
+        "user_id": user["id"],
+        "storage_path": result["path"],
+        "filename": file.filename,
+        "content_type": file.content_type,
+        "size": result.get("size", len(data)),
+        "is_deleted": False,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    return {"url": f"/api/files/{result['path']}", "path": result["path"]}
+
+
+@api.get("/files/{path:path}")
+async def get_file(path: str):
+    rec = await db.files.find_one({"storage_path": path, "is_deleted": False}, {"_id": 0})
+    if not rec:
+        raise HTTPException(404, "Not found")
+    data, ctype = await asyncio.to_thread(get_object_sync, path)
+    return Response(
+        content=data,
+        media_type=rec.get("content_type") or ctype,
+        headers={"Cache-Control": "public, max-age=31536000, immutable"},
+    )
+
+
+# ---------- Pro Upgrade ----------
+@api.post("/upgrade/checkout")
+async def upgrade_checkout(body: UpgradeBody, user: dict = Depends(get_current_user)):
+    origin = body.origin_url.rstrip("/")
+    success_url = f"{origin}/checkout?session_id={{CHECKOUT_SESSION_ID}}&upgrade=1"
+    cancel_url = f"{origin}/dashboard"
+    metadata = {
+        "kind": "upgrade",
+        "user_id": user["id"],
+        "buyer_email": user["email"],
+    }
+    stripe = StripeCheckout(api_key=STRIPE_API_KEY, webhook_url=f"{origin}/api/webhook/stripe")
+    req = CheckoutSessionRequest(
+        amount=PRO_PRICE_USD,
+        currency="usd",
+        success_url=success_url,
+        cancel_url=cancel_url,
+        metadata=metadata,
+    )
+    session = await stripe.create_checkout_session(req)
+    await db.payment_transactions.insert_one({
+        "id": str(uuid.uuid4()),
+        "session_id": session.session_id,
+        "kind": "upgrade",
+        "user_id": user["id"],
+        "buyer_email": user["email"],
+        "amount": PRO_PRICE_USD,
+        "currency": "usd",
+        "metadata": metadata,
+        "payment_status": "initiated",
+        "status": "open",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    return {"url": session.url, "session_id": session.session_id}
+
+
+# ---------- Health ----------
 @api.get("/")
 async def root():
     return {"status": "ok", "service": "creator-storefront"}
@@ -826,8 +978,13 @@ async def on_startup():
         await db.orders.create_index("session_id")
         await db.payment_transactions.create_index("session_id", unique=True)
         await db.affiliates.create_index("code", unique=True)
+        await db.events.create_index("expires_at", expireAfterSeconds=0)
+        await db.events.create_index("item_id")
+        await db.events.create_index("session_id")
+        await db.files.create_index("storage_path")
     except Exception as e:
         logger.warning(f"Index setup: {e}")
+    init_storage()
 
 
 @app.on_event("shutdown")

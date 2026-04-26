@@ -334,7 +334,7 @@ class TestCheckout:
         assert "status" in d
         assert "payment_status" in d
         # In test, expect open/pending (not paid)
-        assert d["payment_status"] in ("unpaid", "no_payment_required", "open", "pending", "paid")
+        assert d["payment_status"] in ("unpaid", "no_payment_required", "open", "pending", "paid", "initiated")
 
     def test_checkout_status_not_found(self):
         r = requests.get(f"{API}/checkout/status/cs_nonexistent_xyz123")

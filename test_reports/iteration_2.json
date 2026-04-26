@@ -1,0 +1,56 @@
+{
+  "summary": "Backend regression + new-feature testing complete. Added /app/backend/tests/test_new_features.py covering image upload, public file serve, Pro upgrade Stripe checkout ($10 / 30 days), upgrade status graceful degrade, AI improve idea, and tracking. Also re-ran full existing suite. Total 52/52 passing. The previously-flagged CRITICAL bug (/api/checkout/status returning 500 when Stripe doesn't recognize a freshly-created session) is now FIXED — verified the route returns 200 with cached payment_status='initiated' for both product and upgrade sessions.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "GET /api/files/{path}",
+        "issue": "Backend correctly sets `Cache-Control: public, max-age=31536000, immutable` on the response, but the public ingress proxy overrides it to `no-store, no-cache, must-revalidate` for all responses. File bytes and Content-Type are served correctly. Functional, but the immutable-CDN benefit is lost. Action: ingress/CDN config — not a backend code bug."
+      },
+      {
+        "endpoint": "POST /api/upload",
+        "issue": "5MB enforcement happens AFTER reading the full body into memory (`data = await file.read()` then length check). For very large uploads this consumes RAM unnecessarily. Streaming/early-rejection via Content-Length header would be safer. Currently rejects 5MB+1B with 400 as expected, so contract is honored."
+      },
+      {
+        "endpoint": "POST /api/upgrade/checkout",
+        "issue": "`origin_url` is taken from the client request body without validation; an attacker could supply any origin for the success_url returned by Stripe. Same pattern exists on /api/checkout/create-session. Recommend allowlist or use a server-side known frontend URL."
+      },
+      {
+        "endpoint": "POST /api/webhook/stripe",
+        "issue": "Logs noise: 'Unexpected error processing webhook: id' for unsigned/malformed bodies. Endpoint correctly returns 400 — log noise only."
+      }
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/backend/tests/test_new_features.py",
+    "/app/test_reports/pytest/pytest_results.xml",
+    "/app/test_reports/pytest/pytest_new_features.xml"
+  ],
+  "action_items": [
+    "(Optional) Validate origin_url on /api/checkout/create-session and /api/upgrade/checkout against a server-side allowlist or env var to prevent open-redirect via Stripe success_url.",
+    "(Optional) Stream/early-reject oversized uploads using Content-Length header before reading the full body.",
+    "(Infra) The public ingress is overriding our Cache-Control on /api/files/{path} responses. Tune ingress to honor backend Cache-Control for /api/files/* paths so static images can be CDN-cached."
+  ],
+  "critical_code_review_comments": [
+    "server.py upload route reads full body before size check — minor DoS concern at scale.",
+    "server.py /api/files/{path} route uses asyncio.to_thread + sync requests for object storage GET on every request; consider httpx async client for higher concurrency.",
+    "server.py @app.on_event('startup') is deprecated in FastAPI; migrate to lifespan handlers.",
+    "server.py: Account deletion still does not delete payment_transactions or files for the user — minor data hygiene.",
+    "server.py: Successful (non-upgrade) order side-effects in _process_paid_session do not check user pro_until / billing — fine for current MVP.",
+    "server.py is now ~990 lines and reaches the 700-line guideline threshold — consider splitting into routers (auth, store, products, customers, orders, affiliates, checkout, upload, ai, telemetry).",
+    "CORS_ORIGINS='*' with allow_credentials=True is non-functional for cookies cross-origin in modern browsers — explicit origin needed for production."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_new_features.py (created)",
+    "/app/backend/tests/backend_test.py (one-line fix: include 'initiated' in payment_status set to reflect graceful-degrade fix)"
+  ],
+  "success_rate": {"backend": "100% (52/52)", "frontend": "not tested (skipped per request)"},
+  "test_credentials": "Tests dynamically create accounts via /api/auth/signup with random emails creator_{hex8}@test.com / password123. /app/memory/test_credentials.md guidance reused.",
+  "seed_data_creation": "None. Each test creates its own throwaway creator + product (TEST_-prefixed). No cleanup between runs (unique uuid suffix avoids collision).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "All 52 backend tests pass against the public REACT_APP_BACKEND_URL. New features verified: (1) POST /api/upload accepts png/jpg/webp/gif <=5MB with auth, returns {url, path}; rejects non-image=>400, oversize=>400, no-auth=>401. (2) GET /api/files/{path} returns bytes + correct image Content-Type; backend sets immutable cache header but ingress overrides it. (3) POST /api/upgrade/checkout creates a $10 Stripe session and writes a payment_transactions row with kind='upgrade'. (4) GET /api/checkout/status/{session_id} now degrades gracefully (200 + cached state) for both product and upgrade flows when Stripe doesn't recognize the session. (5) AI improve-idea works with EMERGENT_LLM_KEY. Future work: validate origin_url server-side; stream uploads; honor Cache-Control at the ingress.",
+  "rca of the issue": "N/A this iteration — previous CRITICAL (checkout/status 500) is verified FIXED in code (server.py 754-765 wraps stripe.get_checkout_status in try/except and returns the cached payment_transactions row with status='open' / payment_status='initiated' on Stripe failure). All other features met spec on first run."
+}

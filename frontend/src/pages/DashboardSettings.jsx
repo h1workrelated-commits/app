@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
+import ImageUploader from "@/components/ImageUploader";
 
 export default function DashboardSettings() {
   const { user, deleteAccount } = useAuth();

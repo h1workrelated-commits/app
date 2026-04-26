@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Plus, Trash2, Pencil, ExternalLink, ShoppingBag, Lightbulb, Heart, Mail } from "lucide-react";
 import { toast } from "sonner";
 import QuickCreate from "@/components/QuickCreate";
+import ImageUploader from "@/components/ImageUploader";
 
 const empty = {
   kind: "sell", // sell | idea
@@ -125,8 +126,15 @@ export default function DashboardProducts() {
               <Textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="mt-1.5 rounded-xl min-h-20" data-testid="item-description-input" />
             </div>
             <div>
-              <Label className="text-xs font-semibold tracking-wider uppercase text-zinc-700">Cover image URL (optional)</Label>
-              <Input value={form.image_url} onChange={(e) => setForm({ ...form, image_url: e.target.value })} className="mt-1.5 h-11 rounded-xl" placeholder="https://..." data-testid="item-image-input" />
+              <Label className="text-xs font-semibold tracking-wider uppercase text-zinc-700">Cover image (optional)</Label>
+              <div className="mt-1.5">
+                <ImageUploader
+                  value={form.image_url}
+                  onChange={(v) => setForm({ ...form, image_url: v })}
+                  label="cover image"
+                  testId="item-image-uploader"
+                />
+              </div>
             </div>
 
             {form.kind === "sell" && (
