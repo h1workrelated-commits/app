@@ -636,7 +636,18 @@ async def checkout_status(session_id: str, request: Request):
         raise HTTPException(404, "Session not found")
     host_url = str(request.base_url).rstrip("/")
     stripe = StripeCheckout(api_key=STRIPE_API_KEY, webhook_url=f"{host_url}/api/webhook/stripe")
-    status_resp: CheckoutStatusResponse = await stripe.get_checkout_status(session_id)
+    try:
+        status_resp: CheckoutStatusResponse = await stripe.get_checkout_status(session_id)
+    except Exception as e:
+        logger.warning(f"Stripe status lookup failed for {session_id}: {e}")
+        return {
+            "session_id": session_id,
+            "status": txn.get("status") or "open",
+            "payment_status": txn.get("payment_status") or "initiated",
+            "amount": txn.get("amount"),
+            "currency": txn.get("currency"),
+            "product_id": (txn.get("metadata") or {}).get("product_id"),
+        }
     if status_resp.payment_status == "paid":
         await _process_paid_session(session_id, "paid", status_resp.amount_total, status_resp.currency)
     else:
