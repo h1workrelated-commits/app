@@ -1,0 +1,112 @@
+{
+  "theme": "LIGHT",
+  "archetype": "Swiss & High-Contrast (Minimalist Variant)",
+  "vibe": "Clean, Modern, Effortless, Trustworthy",
+  "colors": {
+    "background": "#FFFFFF",
+    "surface": "#F4F4F5",
+    "surface_hover": "#E4E4E7",
+    "primary_accent": "#003CFF",
+    "primary_accent_hover": "#002ED6",
+    "text_primary": "#09090B",
+    "text_secondary": "#52525B",
+    "text_inverse": "#FFFFFF",
+    "border": "#E4E4E7",
+    "success": "#10B981",
+    "warning": "#F59E0B",
+    "danger": "#EF4444"
+  },
+  "typography": {
+    "font_families": {
+      "heading": "Outfit, sans-serif",
+      "body": "Inter, sans-serif",
+      "mono": "JetBrains Mono, monospace"
+    },
+    "scale": {
+      "h1": "text-4xl sm:text-5xl lg:text-6xl tracking-tight font-bold",
+      "h2": "text-2xl sm:text-3xl lg:text-4xl tracking-tight font-semibold",
+      "h3": "text-xl sm:text-2xl tracking-tight font-medium",
+      "h4": "text-lg sm:text-xl font-medium",
+      "body_large": "text-lg leading-relaxed",
+      "body": "text-base leading-relaxed",
+      "small": "text-sm text-zinc-500",
+      "label": "text-xs font-semibold tracking-wider uppercase"
+    }
+  },
+  "layout_and_spacing": {
+    "container_padding": "px-4 sm:px-6 lg:px-8",
+    "section_gap": "py-24 sm:py-32",
+    "element_gap": "gap-6 sm:gap-8",
+    "border_radius": {
+      "button": "rounded-full",
+      "card": "rounded-2xl",
+      "input": "rounded-xl",
+      "widget": "rounded-3xl"
+    },
+    "shadows": {
+      "soft": "shadow-[0_2px_8px_rgba(0,0,0,0.04)]",
+      "medium": "shadow-[0_8px_24px_rgba(0,0,0,0.08)]",
+      "floating": "shadow-[0_16px_48px_rgba(0,0,0,0.12)]"
+    }
+  },
+  "components": {
+    "cards": {
+      "style": "bg-white border border-zinc-100 rounded-2xl shadow-[0_2px_8px_rgba(0,0,0,0.04)] p-6 md:p-8 transition-transform hover:-translate-y-1 hover:shadow-[0_8px_24px_rgba(0,0,0,0.08)]"
+    },
+    "buttons": {
+      "primary": "bg-[#003CFF] text-white rounded-full px-6 py-3 font-medium hover:bg-[#002ED6] transition-colors focus:ring-4 focus:ring-[#003CFF]/20",
+      "secondary": "bg-zinc-100 text-zinc-900 rounded-full px-6 py-3 font-medium hover:bg-zinc-200 transition-colors",
+      "outline": "border-2 border-zinc-200 text-zinc-900 rounded-full px-6 py-3 font-medium hover:border-zinc-300 transition-colors"
+    },
+    "inputs": {
+      "style": "w-full rounded-xl border border-zinc-200 px-4 py-3 bg-white focus:border-[#003CFF] focus:ring-1 focus:ring-[#003CFF] outline-none transition-all"
+    },
+    "headers": {
+      "style": "sticky top-0 z-50 bg-white/80 backdrop-blur-xl border-b border-zinc-100"
+    }
+  },
+  "motion": {
+    "hover": "transition-all duration-200 ease-out",
+    "entrance": "animate-in fade-in slide-in-from-bottom-4 duration-500",
+    "dialog": "animate-in zoom-in-95 duration-200"
+  },
+  "media": {
+    "image_urls": [
+      {
+        "category": "creator_portrait_1",
+        "url": "https://images.unsplash.com/photo-1754473698816-767ee4b62466",
+        "description": "Male creator portrait for marketing page"
+      },
+      {
+        "category": "creator_portrait_2",
+        "url": "https://images.unsplash.com/photo-1754473260215-51f8183c137d",
+        "description": "Profile of creator for storefront demo"
+      },
+      {
+        "category": "digital_product_mockup",
+        "url": "https://images.unsplash.com/photo-1775465187747-7d5901a0f6c3",
+        "description": "Smartphone mockup for digital product representation"
+      }
+    ]
+  },
+  "iconography": {
+    "library": "lucide-react",
+    "style": "stroke-width 2, rounded edges, consistent sizing (20px or 24px base)"
+  },
+  "accessibility": {
+    "contrast": "Ensure all text meets WCAG AA (4.5:1).",
+    "focus": "All interactive elements must have visible focus rings.",
+    "testing": "All interactive elements MUST include data-testid attribute (e.g., data-testid='checkout-button')"
+  },
+  "instructions_to_main_agent": [
+    "Strictly adhere to the pure white base with the single #003CFF accent color.",
+    "Do not use generic Inter for headings; strictly use Outfit for headings to give it that premium SaaS/Creator feel.",
+    "Use generous padding (p-6, p-8) and soft, large corner radii (rounded-2xl) to create a 'tactile' soft utility vibe.",
+    "The public storefront MUST be mobile-first: large buttons, thumb-friendly touch targets, sticky bottom CTA if applicable.",
+    "Avoid heavy dark borders; prefer 1px border-zinc-100 with a very soft ambient shadow for cards.",
+    "For the creator dashboard, use a clean sidebar layout with maximum screen real-estate for analytics and product CRUD.",
+    "Implement Shadcn UI components but override their default Vercel-look borders/radii to match these guidelines (rounded-xl, softer borders).",
+    "All interactive elements MUST have data-testid attributes.",
+    "Use the provided image URLs. NEVER use placeholders like via.placeholder.com."
+  ]
+}
